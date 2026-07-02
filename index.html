@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Anaël — Cybersecurity Student & CTF Player</title>
+<meta name="description" content="Portfolio de writeups CTF — OSINT, Forensic, Reverse Engineering, Pwn, Web. Challenges conçus et résolus." />
+
+<!-- Polices : Space Grotesk (display, technique/géométrique), Inter (corps, lisible), JetBrains Mono (terminal / tags / données) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          void:     '#0A0E1A', // fond principal — bleu nuit quasi noir
+          surface:  '#0F1729', // fond des cartes / panneaux
+          elevated: '#141D35', // fond survolé / éléments élevés
+          hairline: '#1E2A47', // bordures discrètes
+          cyan:     { DEFAULT: '#22D3EE', dim: '#0E7490' },
+          blue:     { DEFAULT: '#3B82F6', dim: '#1D4ED8' },
+          ink:      '#E8EDF7', // texte principal
+          muted:    '#8B96B3', // texte secondaire
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  /* ---- Base ---- */
+  html { background: #0A0E1A; }
+  body {
+    background-color: #0A0E1A;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 20% 0%, rgba(59,130,246,0.10), transparent 60%),
+      radial-gradient(ellipse 50% 35% at 100% 15%, rgba(34,211,238,0.08), transparent 60%);
+  }
+
+  /* ---- Grille technique en fond (très subtile, purement décorative) ----
+     Isolée dans un ::before pour que le masque de fondu ne s'applique
+     qu'au motif de grille, jamais au contenu réel de la section (texte, terminal, boutons). */
+  .grid-overlay { position: relative; }
+  .grid-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(232,237,247,0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(232,237,247,0.035) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 80%);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 80%);
+  }
+
+  /* ---- Focus visible : accessibilité clavier ---- */
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid #22D3EE;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ---- Curseur clignotant du terminal ---- */
+  .caret {
+    display: inline-block;
+    width: 0.55ch;
+    background: #22D3EE;
+    margin-left: 2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---- Lueur cyan sur les éléments clés (utilisée avec parcimonie) ---- */
+  .glow-cyan { box-shadow: 0 0 0 1px rgba(34,211,238,0.25), 0 0 40px -12px rgba(34,211,238,0.45); }
+  .text-glow { text-shadow: 0 0 24px rgba(34,211,238,0.35); }
+
+  /* ---- Scrollbar discrète ---- */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #0A0E1A; }
+  ::-webkit-scrollbar-thumb { background: #1E2A47; border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #22D3EE55; }
+
+  /* ---- Modale de writeup : overlay + panneau ---- */
+  #writeupOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(6, 9, 18, 0.72);
+    backdrop-filter: blur(6px) saturate(120%);
+    -webkit-backdrop-filter: blur(6px) saturate(120%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .22s ease;
+  }
+  #writeupOverlay.is-open {
+    opacity: 1;
+    visibility: visible;
+  }
+  #writeupPanel {
+    width: 100%;
+    max-width: 46rem;
+    max-height: min(85vh, 780px);
+    display: flex;
+    flex-direction: column;
+    background: #0B1120;
+    border: 1px solid rgba(34,211,238,0.35);
+    border-radius: 14px;
+    box-shadow:
+      0 0 0 1px rgba(34,211,238,0.12),
+      0 0 24px -4px rgba(34,211,238,0.35),
+      0 0 80px -20px rgba(34,211,238,0.25),
+      0 25px 60px -20px rgba(0,0,0,0.7);
+    transform: translateY(10px) scale(0.98);
+    opacity: 0;
+    transition: transform .25s cubic-bezier(.16,1,.3,1), opacity .22s ease;
+  }
+  #writeupOverlay.is-open #writeupPanel {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  #writeupBody {
+    overflow-y: auto;
+    padding: 1.5rem 1.75rem 1.75rem;
+  }
+  #writeupBody h4 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    color: #E8EDF7;
+    font-size: 0.95rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #writeupBody h4:first-child { margin-top: 0; }
+  #writeupBody p { color: #8B96B3; line-height: 1.7; font-size: 0.925rem; margin-bottom: 0.75rem; }
+  #writeupBody strong { color: #E8EDF7; font-weight: 600; }
+  #writeupBody code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    color: #22D3EE;
+    background: rgba(34,211,238,0.08);
+    border: 1px solid rgba(34,211,238,0.18);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+  }
+  #writeupBody pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #E8EDF7;
+    background: #0F1729;
+    border: 1px solid #1E2A47;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    margin-bottom: 0.9rem;
+    line-height: 1.6;
+  }
+  #writeupBody pre code { background: none; border: none; padding: 0; color: inherit; }
+  #writeupBody .wu-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.6rem;
+    background: #0F1729;
+    border: 1px solid #1E2A47;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1.1rem;
+  }
+  #writeupBody .wu-meta div { font-size: 0.78rem; }
+  #writeupBody .wu-meta span.label { display: block; color: #8B96B3; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
+  #writeupBody .wu-meta span.value { color: #E8EDF7; font-weight: 500; }
+  #writeupBody .wu-track {
+    border-left: 2px solid rgba(34,211,238,0.35);
+    padding-left: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  #writeupBody .wu-flag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: #22D3EE;
+    background: rgba(34,211,238,0.08);
+    border: 1px dashed rgba(34,211,238,0.4);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    margin-top: 0.4rem;
+    word-break: break-all;
+  }
+  #writeupBody .wu-fake {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #FB7185;
+    background: rgba(251,113,133,0.06);
+    border: 1px dashed rgba(251,113,133,0.35);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    margin: 0.3rem 0;
+    display: inline-block;
+  }
+  #writeupBody blockquote {
+    border-left: 2px solid #22D3EE55;
+    padding-left: 0.9rem;
+    color: #8B96B3;
+    font-style: italic;
+    font-size: 0.875rem;
+    margin-bottom: 0.9rem;
+  }
+  #writeupBody ul, #writeupBody ol { color: #8B96B3; font-size: 0.925rem; line-height: 1.7; margin-bottom: 0.9rem; padding-left: 1.2rem; }
+  #writeupBody li { margin-bottom: 0.3rem; }
+  #writeupBody table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.85rem; }
+  #writeupBody th, #writeupBody td { border: 1px solid #1E2A47; padding: 0.5rem 0.7rem; text-align: left; color: #8B96B3; }
+  #writeupBody th { color: #E8EDF7; background: #0F1729; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; text-transform: uppercase; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #writeupOverlay, #writeupPanel { transition: none; }
+  }
+
+  /* ---- Puces de filtre (état actif) ---- */
+  .chip { transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .15s ease; }
+  .chip:active { transform: scale(0.97); }
+  .chip[aria-pressed="true"] {
+    background-color: rgba(34,211,238,0.12);
+    border-color: #22D3EE;
+    color: #22D3EE;
+  }
+
+  /* ---- Onglets Conçus / Résolus ---- */
+  .tab[aria-selected="true"] {
+    color: #E8EDF7;
+    background-color: #141D35;
+    box-shadow: inset 0 0 0 1px #22D3EE55;
+  }
+
+  /* ---- Apparition douce des cartes filtrées ---- */
+  .card-enter { animation: cardIn .35s ease both; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---- Révélation douce au défilement (déclenchée en JS via IntersectionObserver) ---- */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity .7s ease, transform .7s cubic-bezier(.16,1,.3,1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+  /* ---- Barre de progression de lecture (fixée en haut de la page) ---- */
+  #scrollProgress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2.5px;
+    width: 0%;
+    background: linear-gradient(90deg, #3B82F6, #22D3EE);
+    z-index: 70;
+    box-shadow: 0 0 10px rgba(34,211,238,0.55);
+    transition: width .08s linear;
+    pointer-events: none;
+  }
+
+  /* ---- Lien de nav actif (mis à jour au scroll) ---- */
+  header nav ul a { transition: color .25s ease; }
+
+  /* ---- Effet ripple léger au clic sur les éléments interactifs clés ---- */
+  .chip, .tab, [data-open-writeup], #writeupCloseX, #writeupCloseBtn, .js-ripple {
+    position: relative;
+    overflow: hidden;
+  }
+  .ripple-dot {
+    position: absolute;
+    top: var(--ry, 50%);
+    left: var(--rx, 50%);
+    width: var(--rs, 120px);
+    height: var(--rs, 120px);
+    margin-top: calc(var(--rs, 120px) / -2);
+    margin-left: calc(var(--rs, 120px) / -2);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(34,211,238,0.45), rgba(34,211,238,0) 70%);
+    transform: scale(0);
+    opacity: 1;
+    pointer-events: none;
+    animation: rippleAnim .55s ease-out forwards;
+  }
+  @keyframes rippleAnim { to { transform: scale(1); opacity: 0; } }
+
+  /* ---- Respect des préférences de mouvement réduit ---- */
+  @media (prefers-reduced-motion: reduce) {
+    .caret { animation: none; opacity: 1; }
+    .card-enter { animation: none; }
+    .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .ripple-dot { display: none; }
+    #scrollProgress { transition: none; }
+    html { scroll-behavior: auto; }
+  }
+
+  /* Empêche tout débordement horizontal sur mobile */
+  html, body { max-width: 100%; overflow-x: hidden; }
+</style>
+</head>
+
+<body class="bg-void text-ink font-body antialiased">
+
+<!-- Barre de progression de lecture -->
+<div id="scrollProgress" aria-hidden="true"></div>
+
+<!-- Lien d'évitement pour la navigation clavier -->
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-cyan focus:text-void focus:px-4 focus:py-2 focus:rounded-md focus:font-mono focus:text-sm">
+  Aller au contenu principal
+</a>
+
+<!-- ================= HEADER / NAVIGATION ================= -->
+<header class="fixed top-0 inset-x-0 z-50 border-b border-hairline/80 bg-void/80 backdrop-blur-md">
+  <nav class="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between" aria-label="Navigation principale">
+    <a href="#top" class="font-mono text-sm sm:text-base text-ink hover:text-cyan transition-colors">
+      <span class="text-cyan">anael</span><span class="text-muted">@</span><span class="text-blue">ctf</span><span class="text-muted">:~$</span>
+      <span class="caret" aria-hidden="true"></span>
+    </a>
+
+    <ul class="hidden md:flex items-center gap-8 font-mono text-sm text-muted">
+      <li><a href="#writeups" class="hover:text-cyan transition-colors">writeups</a></li>
+      <li><a href="#skills" class="hover:text-cyan transition-colors">stack</a></li>
+      <li><a href="#contact" class="hover:text-cyan transition-colors">contact</a></li>
+    </ul>
+
+    <a href="#writeups"
+       class="hidden md:inline-flex items-center gap-2 rounded-md border border-cyan/40 px-4 py-2 font-mono text-sm text-cyan hover:bg-cyan/10 transition-colors js-ripple">
+      ./writeups
+    </a>
+
+    <!-- Bouton menu mobile -->
+    <button id="menuBtn" type="button" aria-expanded="false" aria-controls="mobileMenu"
+      class="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 rounded-md text-ink hover:bg-elevated transition-colors"
+      aria-label="Ouvrir le menu de navigation">
+      <svg id="iconOpen" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg id="iconClose" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="hidden"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+  </nav>
+
+  <!-- Menu mobile -->
+  <div id="mobileMenu" class="md:hidden hidden border-t border-hairline bg-void">
+    <ul class="flex flex-col font-mono text-sm">
+      <li><a href="#writeups" class="block px-6 py-4 border-b border-hairline/60 text-muted hover:text-cyan hover:bg-elevated">writeups</a></li>
+      <li><a href="#skills" class="block px-6 py-4 border-b border-hairline/60 text-muted hover:text-cyan hover:bg-elevated">stack</a></li>
+      <li><a href="#contact" class="block px-6 py-4 text-muted hover:text-cyan hover:bg-elevated">contact</a></li>
+    </ul>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ================= HERO ================= -->
+<section id="top" class="relative pt-32 pb-20 sm:pt-40 sm:pb-28 grid-overlay">
+  <div class="relative z-10 max-w-6xl mx-auto px-5 sm:px-8 grid lg:grid-cols-2 gap-14 lg:gap-10 items-center">
+
+    <!-- Colonne texte -->
+    <div>
+      <p class="reveal font-mono text-xs sm:text-sm text-cyan tracking-widest uppercase mb-5" style="--reveal-delay:0ms">
+        &gt; Étudiant en Cybersécurité — SSI @ HECM
+      </p>
+      <h1 class="reveal font-display font-semibold text-4xl sm:text-5xl lg:text-[3.25rem] leading-[1.08] tracking-tight mb-6" style="--reveal-delay:80ms">
+        Je décortique les systèmes<br class="hidden sm:block" />
+        pour mieux les <span class="text-cyan text-glow">protéger</span>.
+      </h1>
+      <p class="reveal text-muted text-base sm:text-lg leading-relaxed max-w-lg mb-9" style="--reveal-delay:160ms">
+        Passionné d'OSINT, de forensic et de web exploitation, je documente chaque
+        challenge résolu sous forme de writeups — et je conçois les miens, flag inclus.
+      </p>
+
+      <div class="reveal flex flex-wrap gap-4 mb-12" style="--reveal-delay:220ms">
+        <a href="#writeups"
+           class="js-ripple inline-flex items-center gap-2 rounded-md bg-cyan text-void font-medium px-6 py-3.5 min-h-[44px] hover:bg-cyan/90 active:scale-[0.98] transition-all glow-cyan">
+          Accéder aux writeups
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a href="#contact"
+           class="js-ripple inline-flex items-center gap-2 rounded-md border border-hairline px-6 py-3.5 min-h-[44px] text-ink hover:border-cyan/60 hover:text-cyan active:scale-[0.98] transition-all">
+          Me contacter
+        </a>
+      </div>
+
+      <!-- Stats -->
+      <dl class="reveal grid grid-cols-3 gap-4 max-w-md font-mono" style="--reveal-delay:280ms">
+        <div class="border-t border-hairline pt-3">
+          <dt class="text-2xl sm:text-3xl font-semibold text-ink" data-count-to="10" data-count-suffix="+">0+</dt>
+          <dd class="text-xs text-muted mt-1">writeups publiés</dd>
+        </div>
+        <div class="border-t border-hairline pt-3">
+          <dt class="text-2xl sm:text-3xl font-semibold text-ink" data-count-to="4" data-count-suffix="">0</dt>
+          <dd class="text-xs text-muted mt-1">plateformes CTF</dd>
+        </div>
+        <div class="border-t border-hairline pt-3">
+          <dt class="text-2xl sm:text-3xl font-semibold text-cyan" data-count-to="1" data-count-suffix="">0</dt>
+          <dd class="text-xs text-muted mt-1">CTF conçu</dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Colonne terminal (élément signature) -->
+    <div class="reveal relative" style="--reveal-delay:120ms">
+      <div class="rounded-xl border border-hairline bg-surface/90 backdrop-blur shadow-2xl overflow-hidden glow-cyan">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-hairline bg-elevated/60">
+          <span class="w-3 h-3 rounded-full bg-[#FB7185]/70"></span>
+          <span class="w-3 h-3 rounded-full bg-[#FBBF24]/70"></span>
+          <span class="w-3 h-3 rounded-full bg-[#34D399]/70"></span>
+          <span class="ml-3 font-mono text-xs text-muted">whoami.sh</span>
+        </div>
+        <div id="terminalBody" class="p-5 sm:p-6 font-mono text-[13px] sm:text-sm leading-7 min-h-[280px]" aria-live="polite"></div>
+      </div>
+      <p class="sr-only">
+        Terminal : whoami affiche Anaël, étudiant SSI et joueur de CTF. cat interests.txt liste OSINT, Forensic, Web.
+        ./flag.sh --status renvoie CYB3R{always_learning}.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= SKILLS STRIP ================= -->
+<section id="skills" class="border-y border-hairline bg-surface/40">
+  <div class="max-w-6xl mx-auto px-5 sm:px-8 py-8">
+    <p class="reveal font-mono text-xs text-muted uppercase tracking-widest mb-4">Stack &amp; compétences</p>
+    <ul class="reveal-stagger flex flex-wrap gap-2.5">
+      <!-- Remplacez ou complétez cette liste selon vos compétences -->
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Linux</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Python</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Réseaux &amp; OSI</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">OSINT</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Forensic</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Web Exploitation</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">SQL</li>
+      <li class="font-mono text-xs sm:text-sm px-3 py-1.5 rounded-full border border-hairline text-muted">Git</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= WRITEUPS ================= -->
+<section id="writeups" class="max-w-6xl mx-auto px-5 sm:px-8 py-20 sm:py-28">
+  <div class="reveal max-w-2xl mb-10">
+    <p class="font-mono text-xs sm:text-sm text-cyan tracking-widest uppercase mb-3">&gt; ls ./writeups</p>
+    <h2 class="font-display font-semibold text-3xl sm:text-4xl mb-4">Writeups</h2>
+    <p class="text-muted leading-relaxed">
+      Deux grandes familles de contenu : les challenges que j'ai conçus moi-même, et ceux que j'ai résolus
+      sur différentes plateformes. Filtrez par catégorie pour retrouver ce qui vous intéresse.
+    </p>
+  </div>
+
+  <!-- Onglets Conçus / Résolus -->
+  <div role="tablist" aria-label="Type de writeups" class="reveal inline-flex p-1 rounded-lg border border-hairline bg-surface mb-6" style="--reveal-delay:80ms">
+    <button role="tab" id="tab-designed" aria-controls="panel-writeups" aria-selected="true" data-type="designed"
+      class="tab font-mono text-sm px-4 sm:px-5 py-2.5 min-h-[44px] rounded-md text-muted transition-colors">
+      Challenges conçus
+    </button>
+    <button role="tab" id="tab-solved" aria-controls="panel-writeups" aria-selected="false" data-type="solved"
+      class="tab font-mono text-sm px-4 sm:px-5 py-2.5 min-h-[44px] rounded-md text-muted transition-colors">
+      Challenges résolus
+    </button>
+  </div>
+
+  <!-- Filtres de catégorie -->
+  <div class="reveal flex flex-wrap gap-2.5 mb-10" role="group" aria-label="Filtrer par catégorie" style="--reveal-delay:140ms">
+    <button type="button" data-cat="all" aria-pressed="true"
+      class="chip font-mono text-xs sm:text-sm px-3.5 py-2 min-h-[40px] rounded-full border border-hairline text-muted">
+      Tous
+    </button>
+    <!-- Les autres puces sont générées dynamiquement par JS à partir de CATEGORIES pour rester cohérentes avec les données -->
+  </div>
+
+  <!-- Grille des writeups -->
+  <div id="panel-writeups" role="tabpanel" aria-labelledby="tab-designed"
+    class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  </div>
+
+  <!-- État vide -->
+  <div id="emptyState" class="hidden text-center py-16 border border-dashed border-hairline rounded-xl">
+    <p class="font-mono text-sm text-muted">Aucun writeup pour cette combinaison de filtres.</p>
+  </div>
+</section>
+
+<!-- ================= CONTACT ================= -->
+<section id="contact" class="border-t border-hairline bg-surface/40">
+  <div class="max-w-6xl mx-auto px-5 sm:px-8 py-20 sm:py-28">
+    <div class="reveal max-w-2xl mb-12">
+      <p class="font-mono text-xs sm:text-sm text-cyan tracking-widest uppercase mb-3">&gt; ./contact.sh</p>
+      <h2 class="font-display font-semibold text-3xl sm:text-4xl mb-4">Discutons</h2>
+      <p class="text-muted leading-relaxed">
+        Une opportunité, une question sur un writeup, ou juste envie d'échanger CTF ? Le plus simple :
+        un mail, ou l'une des plateformes ci-dessous.
+      </p>
+    </div>
+
+    <div class="reveal-stagger grid sm:grid-cols-2 gap-5">
+      <a href="mailto:donasingbo332@gmail.com"
+         class="js-ripple group flex items-center justify-between gap-4 rounded-xl border border-hairline bg-surface p-5 sm:p-6 hover:border-cyan/50 transition-colors sm:col-span-2">
+        <div class="flex items-center gap-4">
+          <span class="grid place-items-center w-11 h-11 rounded-lg bg-elevated text-cyan shrink-0" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+          </span>
+          <div>
+            <p class="font-medium text-ink">Envoyer un email</p>
+            <p class="text-sm text-muted font-mono">donasingbo332@gmail.com</p>
+          </div>
+        </div>
+        <svg class="text-muted group-hover:text-cyan group-hover:translate-x-1 transition-all shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+
+      <!-- Remplacez href="#" par vos vrais profils -->
+      <a href="https://github.com/xxanael" target="_blank" rel="noopener noreferrer"
+         class="js-ripple group flex items-center gap-4 rounded-xl border border-hairline bg-surface p-5 hover:border-cyan/50 transition-colors">
+        <span class="grid place-items-center w-11 h-11 rounded-lg bg-elevated text-ink shrink-0" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.4 7.86 10.93.57.1.79-.25.79-.55 0-.27-.01-1.16-.02-2.11-3.2.7-3.87-1.36-3.87-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.59.24 2.76.12 3.05.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.42.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.66.8.55A10.53 10.53 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z"/></svg>
+        </span>
+        <div>
+          <p class="font-medium text-ink">GitHub</p>
+          <p class="text-sm text-muted font-mono">@xxanael</p>
+        </div>
+      </a>
+
+      <a href="https://tryhackme.com/p/xxanael" target="_blank" rel="noopener noreferrer"
+         class="js-ripple group flex items-center gap-4 rounded-xl border border-hairline bg-surface p-5 hover:border-cyan/50 transition-colors">
+        <span class="grid place-items-center w-11 h-11 rounded-lg bg-elevated text-cyan shrink-0" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-5Z"/></svg>
+        </span>
+        <div>
+          <p class="font-medium text-ink">TryHackMe</p>
+          <p class="text-sm text-muted font-mono">xxa.nael</p>
+        </div>
+      </a>
+
+      <a href="https://xxanael.github.io/Portfolio/" target="_blank" rel="noopener noreferrer"
+         class="js-ripple group flex items-center gap-4 rounded-xl border border-hairline bg-surface p-5 hover:border-cyan/50 transition-colors">
+        <span class="grid place-items-center w-11 h-11 rounded-lg bg-elevated text-cyan shrink-0" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18M3 12h18"/></svg>
+        </span>
+        <div>
+          <p class="font-medium text-ink">Portfolio</p>
+          <p class="text-sm text-muted font-mono">xxa.nael</p>
+        </div>
+      </a>
+
+      <a href="https://www.hackthebox.com" target="_blank" rel="noopener noreferrer"
+         class="js-ripple group flex items-center gap-4 rounded-xl border border-hairline bg-surface p-5 hover:border-cyan/50 transition-colors">
+        <span class="grid place-items-center w-11 h-11 rounded-lg bg-elevated text-cyan shrink-0" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v9L12 22l-8-6.5v-9L12 2Z"/></svg>
+        </span>
+        <div>
+          <p class="font-medium text-ink">HackTheBox</p>
+          <p class="text-sm text-muted font-mono">xxa.nael</p>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ================= MODALE WRITEUP ================= -->
+<div id="writeupOverlay" role="presentation">
+  <div id="writeupPanel" role="dialog" aria-modal="true" aria-labelledby="writeupTitle" tabindex="-1">
+    <!-- En-tête -->
+    <div class="flex items-start justify-between gap-4 px-6 py-5 border-b border-hairline shrink-0">
+      <div>
+        <p id="writeupKicker" class="font-mono text-[11px] text-cyan uppercase tracking-widest mb-1.5">&gt; cat writeup.md</p>
+        <h3 id="writeupTitle" class="font-display font-semibold text-xl sm:text-2xl text-ink"></h3>
+      </div>
+      <button type="button" id="writeupCloseX" aria-label="Fermer la fenêtre"
+        class="shrink-0 grid place-items-center w-9 h-9 rounded-md border border-hairline text-muted hover:text-cyan hover:border-cyan/50 transition-colors">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Corps défilant -->
+    <div id="writeupBody"></div>
+
+    <!-- Pied -->
+    <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-hairline shrink-0">
+      <button type="button" id="writeupCloseBtn"
+        class="inline-flex items-center gap-2 rounded-md border border-hairline px-4 py-2.5 min-h-[40px] text-sm text-ink hover:border-cyan/60 hover:text-cyan active:scale-[0.98] transition-all">
+        Fermer
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= FOOTER ================= -->
+<footer class="border-t border-hairline">
+  <div class="max-w-6xl mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <p class="font-mono text-xs text-muted">© <span id="year"></span> — Portfolio CTF</p>
+    <p class="font-mono text-xs text-muted">CYB3R{always_learning}</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Barre de progression de lecture ---------- */
+  const scrollProgressEl = document.getElementById('scrollProgress');
+  function updateScrollProgress() {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = docHeight > 0 ? Math.min(100, (scrollTop / docHeight) * 100) : 0;
+    scrollProgressEl.style.width = pct + '%';
+  }
+  window.addEventListener('scroll', updateScrollProgress, { passive: true });
+  window.addEventListener('resize', updateScrollProgress);
+  updateScrollProgress();
+
+  /* ---------- Révélation douce au défilement ---------- */
+  function initScrollReveal() {
+    // Applique un délai de fondu échelonné aux enfants des conteneurs "reveal-stagger"
+    document.querySelectorAll('.reveal-stagger').forEach(container => {
+      Array.from(container.children).forEach((child, i) => {
+        child.classList.add('reveal');
+        child.style.setProperty('--reveal-delay', `${i * 55}ms`);
+      });
+    });
+
+    const revealEls = document.querySelectorAll('.reveal');
+
+    if (prefersReducedMotion) {
+      revealEls.forEach(el => el.classList.add('is-visible'));
+      return;
+    }
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+    revealEls.forEach(el => revealObserver.observe(el));
+  }
+  initScrollReveal();
+
+  /* ---------- Compteurs animés (statistiques du hero) ---------- */
+  function initCounters() {
+    const counters = document.querySelectorAll('[data-count-to]');
+    if (!counters.length) return;
+
+    if (prefersReducedMotion) {
+      counters.forEach(el => {
+        el.textContent = el.dataset.countTo + (el.dataset.countSuffix || '');
+      });
+      return;
+    }
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        const target = parseInt(el.dataset.countTo, 10) || 0;
+        const suffix = el.dataset.countSuffix || '';
+        const duration = 900;
+        const start = performance.now();
+
+        function step(now) {
+          const progress = Math.min((now - start) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+          el.textContent = Math.round(eased * target) + suffix;
+          if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+        counterObserver.unobserve(el);
+      });
+    }, { threshold: 0.5 });
+
+    counters.forEach(el => counterObserver.observe(el));
+  }
+  initCounters();
+
+  /* ---------- Lien de navigation actif selon la section visible ---------- */
+  function initNavSpy() {
+    const navLinks = document.querySelectorAll('header nav ul a[href^="#"]');
+    const sectionIds = Array.from(navLinks).map(a => a.getAttribute('href').slice(1));
+    const sections = sectionIds.map(id => document.getElementById(id)).filter(Boolean);
+    if (!sections.length || !navLinks.length) return;
+
+    const spyObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.id;
+          navLinks.forEach(link => {
+            link.classList.toggle('text-cyan', link.getAttribute('href') === `#${id}`);
+          });
+        }
+      });
+    }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });
+
+    sections.forEach(sec => spyObserver.observe(sec));
+  }
+  initNavSpy();
+
+  /* ---------- Effet ripple léger au clic ---------- */
+  function spawnRipple(target, clientX, clientY) {
+    const rect = target.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 2;
+    const dot = document.createElement('span');
+    dot.className = 'ripple-dot';
+    dot.style.setProperty('--rs', `${size}px`);
+    dot.style.setProperty('--rx', `${clientX - rect.left}px`);
+    dot.style.setProperty('--ry', `${clientY - rect.top}px`);
+    target.appendChild(dot);
+    dot.addEventListener('animationend', () => dot.remove());
+  }
+
+  document.addEventListener('click', (e) => {
+    if (prefersReducedMotion) return;
+    const target = e.target.closest('.chip, .tab, [data-open-writeup], #writeupCloseX, #writeupCloseBtn, .js-ripple');
+    if (!target) return;
+    spawnRipple(target, e.clientX, e.clientY);
+  });
+
+  /* ---------- Année dans le footer ---------- */
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* ---------- Menu mobile ---------- */
+  const menuBtn = document.getElementById('menuBtn');
+  const mobileMenu = document.getElementById('mobileMenu');
+  const iconOpen = document.getElementById('iconOpen');
+  const iconClose = document.getElementById('iconClose');
+
+  menuBtn.addEventListener('click', () => {
+    const isOpen = mobileMenu.classList.contains('hidden') === false;
+    mobileMenu.classList.toggle('hidden');
+    iconOpen.classList.toggle('hidden');
+    iconClose.classList.toggle('hidden');
+    menuBtn.setAttribute('aria-expanded', String(!isOpen));
+  });
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      mobileMenu.classList.add('hidden');
+      iconOpen.classList.remove('hidden');
+      iconClose.classList.add('hidden');
+      menuBtn.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  /* ---------- Effet machine à écrire du terminal héro ---------- */
+  const terminalLines = [
+    { prompt: 'guest@ctf-portfolio:~$ whoami', output: '> Anaël — Étudiant SSI, CTF Player' },
+    { prompt: 'guest@ctf-portfolio:~$ cat interests.txt', output: '> OSINT · Forensic · Web · Reverse · Pwn' },
+    { prompt: 'guest@ctf-portfolio:~$ ./flag.sh --status', output: '> CYB3R{always_learning}' },
+  ];
+  const terminalBody = document.getElementById('terminalBody');
+
+  function renderStatic() {
+    terminalBody.innerHTML = terminalLines.map(l =>
+      `<div class="mb-3"><span class="text-muted">${l.prompt}</span><br><span class="text-cyan">${l.output}</span></div>`
+    ).join('') + '<span class="caret" aria-hidden="true">&nbsp;</span>';
+  }
+
+  async function typeLine(el, text, speed) {
+    for (let i = 0; i <= text.length; i++) {
+      el.textContent = text.slice(0, i);
+      await new Promise(r => setTimeout(r, speed));
+    }
+  }
+
+  async function runTypewriter() {
+    if (prefersReducedMotion) { renderStatic(); return; }
+    terminalBody.innerHTML = '';
+    for (const line of terminalLines) {
+      const wrap = document.createElement('div');
+      wrap.className = 'mb-3';
+      const promptEl = document.createElement('span');
+      promptEl.className = 'text-muted';
+      wrap.appendChild(promptEl);
+      terminalBody.appendChild(wrap);
+      await typeLine(promptEl, line.prompt, 18);
+      await new Promise(r => setTimeout(r, 200));
+      wrap.appendChild(document.createElement('br'));
+      const outEl = document.createElement('span');
+      outEl.className = 'text-cyan';
+      wrap.appendChild(outEl);
+      await typeLine(outEl, line.output, 14);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    const caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.setAttribute('aria-hidden', 'true');
+    caret.innerHTML = '&nbsp;';
+    terminalBody.appendChild(caret);
+  }
+
+  // Ne lance l'animation que lorsque le terminal entre dans le viewport
+  const terminalObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        runTypewriter();
+        terminalObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  terminalObserver.observe(terminalBody);
+
+  /* ---------- Données des writeups ---------- */
+  // Remplacez ces exemples par vos propres writeups. "link" doit pointer vers votre article complet.
+  const CATEGORIES = [
+    { id: 'osint',   label: 'OSINT',               color: '#22D3EE', icon: 'eye' },
+    { id: 'forensic',label: 'Forensic',             color: '#818CF8', icon: 'search' },
+    { id: 'reverse', label: 'Reverse Engineering',  color: '#A78BFA', icon: 'cpu' },
+    { id: 'pwn',     label: 'Pwn',                  color: '#FB7185', icon: 'terminal' },
+    { id: 'web',     label: 'Web',                  color: '#34D399', icon: 'globe' },
+    { id: 'crypto',  label: 'Crypto',                color: '#FBBF24', icon: 'lock' },
+    { id: 'misc',    label: 'Divers',                color: '#94A3B8', icon: 'grid' },
+  ];
+
+  const ICONS = {
+    eye: '<circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    cpu: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+    terminal: '<path d="m5 7 5 5-5 5"/><path d="M12 17h7"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18M3 12h18"/>',
+    lock: '<rect x="4" y="10" width="16" height="10" rx="1.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  };
+
+  function iconSvg(name, color) {
+    return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  }
+
+  const WRITEUPS = [
+    // ---- Challenges conçus ----
+    {
+      type: 'designed', category: 'forensic', id: 'matryoshka-bits',
+      title: 'Matryoshka Bits',
+      description: "150 couches de ZIP imbriqués à automatiser en Python, avant de reconstruire depuis une suite de bits ASCII une image JPEG cachant le flag.",
+      difficulty: 'Moyen', date: '2026', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Catégorie</span><span class="value">Forensic</span></div>
+          <div><span class="label">Difficulté</span><span class="value">Moyen</span></div>
+          <div><span class="label">Fichier fourni</span><span class="value">matryoshka.zip</span></div>
+          <div><span class="label">Format du flag</span><span class="value">CYB3R{...}</span></div>
+        </div>
+        <h4>📝 Synopsis</h4>
+        <p>Une archive ZIP contient une autre archive ZIP, qui contient une autre archive ZIP... 150 couches d'imbrication séparent le joueur d'un fichier final contenant une longue suite de bits ASCII. Cette suite doit être reconstruite en une image JPEG pour révéler le flag.</p>
+        <h4>🚧 Writeup en cours de rédaction</h4>
+        <p>La documentation détaillée de ce challenge (script Python d'automatisation de l'extraction, méthode de reconstruction bit-à-bit vers JPEG) sera publiée prochainement. Revenez bientôt pour la version complète !</p>
+      `,
+    },
+    {
+      type: 'designed', category: 'osint', id: 'digital-footprint',
+      title: 'Digital Footprint',
+      description: "Traque d'un suspect en fuite après un détournement de fonds : métadonnées PDF, énumération de pseudonyme et analyse GEOINT d'un reflet dans des lunettes de soleil.",
+      difficulty: 'Difficile', date: '2026', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Catégorie</span><span class="value">OSINT</span></div>
+          <div><span class="label">Difficulté</span><span class="value">Avancée (L3 SSI)</span></div>
+          <div><span class="label">Fichier fourni</span><span class="value">enregistrement_aether.pdf</span></div>
+          <div><span class="label">Points</span><span class="value">100</span></div>
+        </div>
+        <h4>📝 Synopsis</h4>
+        <p>Un audit interne au sein d'<strong>Aether Dynamics</strong> a mis en évidence un détournement de fonds massif. Le principal suspect s'est volatilisé, mais les services ont intercepté un unique document lié à ses activités frauduleuses. Objectif : retrouver sa position géographique exacte lors de sa dernière apparition en ligne, au format <code>CYB3R{Nom_De_L_Etablissement_Ville}</code>.</p>
+
+        <h4>Étape 1 — Analyse forensic du document</h4>
+        <div class="wu-track">
+          <p>Le fichier <code>enregistrement_aether.pdf</code> est d'abord passé à la moulinette de <code>exiftool</code> pour vérifier si le suspect a laissé des traces dans la structure même du document.</p>
+          <pre><code>exiftool enregistrement_aether.pdf</code></pre>
+          <p>Le champ <strong>Author</strong> contient un pseudonyme unique utilisé par le suspect : <code>vdrake-admin88</code>.</p>
+        </div>
+
+        <h4>Étape 2 — Énumération OSINT du pseudonyme</h4>
+        <div class="wu-track">
+          <p>Avec ce pseudonyme, l'outil d'énumération <strong>Sherlock</strong> permet de scanner des centaines de plateformes :</p>
+          <pre><code>sherlock vdrake-admin88</code></pre>
+          <p>Un profil actif et cohérent avec le profil technique du suspect apparaît : <strong>GitHub</strong> (<code>github.com/vdrake-admin88</code>).</p>
+        </div>
+
+        <h4>Étape 3 — Investigation de la plateforme GitHub</h4>
+        <div class="wu-track">
+          <p>La biographie du profil GitHub confirme l'identité : le suspect travaille dans la tech/SSI pour le compte d'<em>Aether Dynamics</em>. Aucun dépôt public compromettant à première vue — l'attention se porte alors sur sa <strong>photo de profil</strong>.</p>
+        </div>
+
+        <h4>Étape 4 — Analyse GEOINT du reflet</h4>
+        <div class="wu-track">
+          <p>Le suspect porte des lunettes de soleil sur sa photo. En zoomant et en ajustant netteté et contraste sur la zone des verres, un <strong>reflet</strong> très net de l'environnement immédiat apparaît. L'analyse de l'architecture visible dans ce reflet mène directement à un centre culturel bien connu au Bénin : le <strong>Centre Art Résidence</strong>, situé à <strong>Porto-Novo</strong>.</p>
+        </div>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">CYB3R{Art_Residence_Porto_Novo}</div>
+      `,
+    },
+    {
+      type: 'designed', category: 'osint', id: 'dojo-kurokami',
+      title: 'Dojo Kurokami',
+      description: "Challenge OSINT à l'esthétique samouraï : traquer les traces numériques d'un maître disparu entre blog caché, Tumblr et métadonnées EXIF pour écarter deux faux flags.",
+      difficulty: 'Difficile', date: '2026', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Catégorie</span><span class="value">OSINT</span></div>
+          <div><span class="label">Difficulté</span><span class="value">Avancée</span></div>
+          <div><span class="label">Point d'entrée</span><span class="value">Site vitrine (HTML)</span></div>
+          <div><span class="label">Flags</span><span class="value">3 (2 faux, 1 vrai)</span></div>
+        </div>
+        <h4>📝 Contexte narratif</h4>
+        <p>Le Dojo Kurokami était une école secrète de samouraï fondée dans les montagnes du Kyushu. Son maître, connu sous le pseudonyme <strong>SenseiKenzan</strong>, a disparu après avoir laissé des indices dispersés sur internet. Mission : retrouver le nom du sanctuaire où il s'est retiré.</p>
+
+        <h4>Étape 1 — Code source du site vitrine</h4>
+        <div class="wu-track">
+          <p>L'inspection du code source (<code>Ctrl+U</code>) révèle un commentaire HTML dissimulé :</p>
+          <pre><code>&lt;!-- Archive des enseignements : voir /dojo-archives/bushido.html --&gt;</code></pre>
+        </div>
+
+        <h4>Étape 2 — Le blog caché</h4>
+        <div class="wu-track">
+          <p>La page <code>/dojo-archives/bushido.html</code> présente trois articles sur le Bushido, avec un encadré affichant :</p>
+          <span class="wu-fake">CYB3R{honneur_du_samourai}</span>
+          <p>⚠️ Faux flag, placé intentionnellement pour piéger les joueurs pressés. La lecture continue révèle un commentaire caché pointant vers <code>senseikenzan.tumblr.com</code>.</p>
+        </div>
+
+        <h4>Étape 3 — Le profil Tumblr</h4>
+        <div class="wu-track">
+          <p>Le profil présente 5 posts sur les arts martiaux et le Japon. Dans les commentaires :</p>
+          <span class="wu-fake">CYB3R{voie_des_anciens_1337}</span>
+          <p>⚠️ Encore un piège. Le post sur les archives photographiques contient un lien direct vers une image hébergée sur GitHub.</p>
+        </div>
+
+        <h4>Étape 4 — Métadonnées EXIF de l'image</h4>
+        <div class="wu-track">
+          <pre><code>exiftool kurokami_dojo.jpg</code></pre>
+          <p>Le champ <strong>Comment</strong> révèle : <em>« Le sanctuaire se trouve là où le soleil se lève sur le mont Kurokami »</em>, suivi du flag, accompagné de coordonnées GPS (33°4'59.88"N, 130°28'0.12"E) pointant vers la région de Kyushu au Japon — cohérent avec le scénario.</p>
+        </div>
+
+        <h4>🏁 Flag final</h4>
+        <div class="wu-flag">CYB3R{katana_no_michi_4782}</div>
+
+        <h4>Résumé des étapes</h4>
+        <table>
+          <thead><tr><th>Étape</th><th>Action</th><th>Résultat</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Inspecter le code source HTML</td><td>Lien vers le blog caché</td></tr>
+            <tr><td>2</td><td>Lire le blog caché</td><td>Faux flag + lien Tumblr</td></tr>
+            <tr><td>3</td><td>Explorer le profil Tumblr</td><td>Faux flag + lien image GitHub</td></tr>
+            <tr><td>4</td><td>exiftool sur l'image</td><td>Flag final</td></tr>
+          </tbody>
+        </table>
+      `,
+    },
+    {
+      type: 'designed', category: 'osint', id: 'echoes-of-a-ghost',
+      title: 'Echoes of a Ghost',
+      description: "Enquête sur une fuite de données chez un fournisseur d'énergie : décodage d'une adresse What3Words dissimulée dans un article, puis traque du cyber-espion sur Mastodon.",
+      difficulty: 'Difficile', date: '2026', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Catégorie</span><span class="value">OSINT</span></div>
+          <div><span class="label">Difficulté</span><span class="value">Avancée (L3 SSI)</span></div>
+          <div><span class="label">Fichier fourni</span><span class="value">Journal.pdf</span></div>
+          <div><span class="label">Points</span><span class="value">250</span></div>
+        </div>
+        <h4>📝 Synopsis</h4>
+        <p>La multinationale <em>BeninHydro</em> a subi un vol de données massives concernant son réseau énergétique régional. Entre la revendication opportuniste du collectif <code>#ShadowVanguard</code> et l'incrimination technique de l'ingénieur <code>Real_Alpha_Cyber</code>, l'ANSSI soupçonne une manipulation de haut vol. Objectif : identifier le véritable pseudonyme du cyber-espion.</p>
+
+        <h4>Étape 1 — Analyse sémantique de l'article</h4>
+        <div class="wu-track">
+          <p>Dans le second paragraphe, trois mots sont placés entre guillemets de manière artificielle au milieu du jargon cyber : <em>« saucepans »</em>, <em>« disappear »</em>, <em>« immigrating »</em>. Un analyste OSINT reconnaît la syntaxe du système <strong>What3Words</strong> : <code>///saucepans.disappear.immigrating</code>.</p>
+        </div>
+
+        <h4>Étape 2 — Pivot géospatial</h4>
+        <div class="wu-track">
+          <p>L'introduction de ces trois mots sur What3Words mène directement au restaurant <strong>« Lion Bar »</strong>, situé à <strong>Grand-Popo</strong>, au Bénin. L'article précise que l'attaquant est très actif sur le réseau décentralisé <strong>Mastodon</strong>, où il aurait laissé une critique publique liée à cet emplacement.</p>
+        </div>
+
+        <h4>Étape 3 — Investigation sur Mastodon</h4>
+        <div class="wu-track">
+          <p>Deux approches mènent au post recherché : le Google Dorking (<code>site:mastodon.social "Lion Bar" "Grand-Popo"</code>) ou la recherche interne de l'instance. Le compte de l'attaquant, <strong>@K0n0_Sec</strong>, publie un message revendiquant l'opération et scellant une preuve d'authenticité encodée depuis le Lion Bar de Grand-Popo.</p>
+        </div>
+
+        <h4>Étape 4 — Décodage du flag</h4>
+        <div class="wu-track">
+          <p>Le message contient une chaîne encodée en Base64 :</p>
+          <pre><code>Q1lCM1J7RnIwbV9HcjRuZF9QMHAwX1cxdGhfTDB2M30K</code></pre>
+          <pre><code>echo "Q1lCM1J7RnIwbV9HcjRuZF9QMHAwX1cxdGhfTDB2M30K" | base64 -d</code></pre>
+        </div>
+
+        <h4>🏁 Flag final</h4>
+        <div class="wu-flag">CYB3R{Fr0m_Gr4nd_P0p0_W1th_L0v3}</div>
+      `,
+    },
+
+    // ---- Challenges résolus ----
+    {
+      type: 'solved', category: 'osint', id: 'coca-cola-freestyle',
+      title: "Coca-Cola's Freestyle Machines",
+      description: "Identification de l'établissement le plus proche possédant une machine Coca-Cola Freestyle près de l'hôtel Westin Peachtree Plaza, via store locator officiel.",
+      difficulty: 'Facile', date: '2024', platform: 'Kase Scenarios', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Série</span><span class="value">Orkla — Kase Scenarios</span></div>
+          <div><span class="label">Donneur d'ordre</span><span class="value">Orkla</span></div>
+          <div><span class="label">Point de départ</span><span class="value">Westin Peachtree Plaza, Atlanta</span></div>
+        </div>
+        <h4>🎯 Cible</h4>
+        <p>Trouver le nom de l'établissement le plus proche de l'hôtel possédant une machine <strong>Coca-Cola Freestyle</strong>, dans le cadre de la préparation à la convention Dragon Con.</p>
+
+        <h4>Piste 1 — Recherche de proximité brute ❌</h4>
+        <div class="wu-track">
+          <p>Recherche initiale sur les restaurants à proximité immédiate de l'hôtel, avec test sur <em>Cuts Steakhouse</em>. Échec : l'établissement ne possède pas la machine spécifique demandée.</p>
+        </div>
+
+        <h4>Piste 2 — Pivot via les outils de la marque ✅</h4>
+        <div class="wu-track">
+          <p>Outils utilisés : le localisateur officiel <code>coca-colafreestyle.com/find-freestyle-locations</code> et Google Maps pour le calcul de proximité.</p>
+          <p>En extrayant les adresses possédant une machine Freestyle à Atlanta puis en calculant la proximité depuis le Westin, un établissement franchisé du <strong>Peachtree Center Mall</strong> ressort systématiquement, à moins de 2 minutes à pied de l'hôtel.</p>
+        </div>
+
+        <h4>💡 Leçon apprise</h4>
+        <blockquote>Ne pas deviner, valider : mieux vaut chercher la cartographie de la spécificité (le site officiel Coca-Cola Freestyle) que la cartographie du lieu.</blockquote>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">[censuré — politique anti-spoiler]</div>
+      `,
+    },
+    {
+      type: 'solved', category: 'osint', id: 'secret-meetup-dragoncon',
+      title: 'Secret Meetup at Dragon Con 2024',
+      description: "Pivot depuis une transcription audio phonétique erronée vers une adresse what3words précise, menant au lieu exact d'un rassemblement secret.",
+      difficulty: 'Moyen', date: '2024', platform: 'Kase Scenarios', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Série</span><span class="value">Orkla — Kase Scenarios</span></div>
+          <div><span class="label">Point de départ</span><span class="value">Audio intercepté au Sherlock Holmes Fanclub</span></div>
+          <div><span class="label">Contrainte</span><span class="value">Nom de l'établissement uniquement</span></div>
+        </div>
+        <h4>🎯 Cible</h4>
+        <p>Trouver le nom exact du lieu où les membres du fan-club de Sherlock Holmes ont organisé leur rassemblement secret durant Dragon Con 2024.</p>
+
+        <h4>Piste 1 — Analyse phonétique ⚠️ (échec partiel)</h4>
+        <div class="wu-track">
+          <p>Avec <strong>Happy Scribe</strong>, isolation des fragments phonétiques <em>« bongo skip »</em> puis <em>« Outgoing Bongo Skip »</em>. Soumis à Orkla, ces termes sont rejetés comme localisation directe.</p>
+        </div>
+
+        <h4>Piste 2 — Pivot via what3words ✅</h4>
+        <div class="wu-track">
+          <p>Reconnaissance de la structure syntaxique <em>« Mot.Mot.Mot »</em> typique de <strong>what3words</strong>. Entrée de la combinaison exacte <code>outgoing.bongo.skip</code> sur la plateforme dédiée.</p>
+          <p>Les coordonnées pointent, avec une précision de 3×3 mètres, sur un restaurant situé à l'intérieur de l'<strong>hôtel Hilton Atlanta</strong> — l'un des hubs principaux de la convention.</p>
+        </div>
+
+        <h4>💡 Leçons apprises</h4>
+        <blockquote>Trois mots anglais mis côte à côte de manière absurde ne forment pas une phrase à traduire, mais potentiellement une adresse what3words.</blockquote>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">[censuré — politique anti-spoiler]</div>
+      `,
+    },
+    {
+      type: 'solved', category: 'osint', id: 'missing-bronze-statue',
+      title: 'The Missing Bronze Statue',
+      description: "Identification d'une statue en bronze hors-cadre à partir d'une photo géolocalisée de la parade Dragon Con 2021, via Street View et inventaire d'art public.",
+      difficulty: 'Difficile', date: '2024', platform: 'Kase Scenarios', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Série</span><span class="value">Orkla — Kase Scenarios</span></div>
+          <div><span class="label">Point de départ</span><span class="value">Baker St NW &amp; Peachtree St NE, Atlanta</span></div>
+          <div><span class="label">Contexte</span><span class="value">Parade Dragon Con 2021</span></div>
+        </div>
+        <h4>🎯 Cible</h4>
+        <p>Identifier le nom de la statue en bronze située immédiatement à droite, hors cadre, de l'image géolocalisée — et son concepteur.</p>
+
+        <h4>Piste 1 — La plaque de rue honorifique ❌ (piège évité)</h4>
+        <div class="wu-track">
+          <p>Recherche historique sur "Xernona Clayton Way", visible sous le feu tricolore. Une statue de Xernona Clayton, inaugurée en 2023, existe bien — mais son emplacement (croisement Simpson St) ne correspond pas au tracé de la parade de 2021. Faux positif.</p>
+        </div>
+
+        <h4>Piste 2 — Tracé de la parade &amp; inventaire d'art public ✅</h4>
+        <div class="wu-track">
+          <p>Alignement à l'intersection exacte de la photo, puis pivot visuel vers l'esplanade du complexe immobilier situé juste à l'est (Truist Plaza / SunTrust Plaza) via <strong>Google Street View</strong>. Découverte d'une œuvre monumentale en bronze installée depuis <strong>1991</strong>, conçue par un célèbre architecte et promoteur d'Atlanta — le même qui a dessiné les hôtels hubs environnants de la convention. L'œuvre s'inspire d'une sculpture plus petite de <em>Paul Manship</em> nommée <em>Maenad</em>.</p>
+        </div>
+
+        <h4>💡 Leçons apprises</h4>
+        <blockquote>Se méfier des homonymes temporels : une rue peut porter un nom honorifique sur plusieurs blocs. Prendre du recul à 360° avec Street View pour ce qui est « juste hors du cadre » reste une compétence clé.</blockquote>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">[censuré — politique anti-spoiler]</div>
+      `,
+    },
+    {
+      type: 'solved', category: 'osint', id: 'fraud-fake-injury',
+      title: 'Fraud Case: The Fake Injury',
+      description: "Confirmation de l'identité d'un fraudeur simulant une blessure, via extraction d'un numéro de dossard et Google Dorking sur un registre de résultats de marathon.",
+      difficulty: 'Moyen', date: '2024', platform: 'Kase Scenarios', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Série</span><span class="value">Orkla — Kase Scenarios</span></div>
+          <div><span class="label">Point de départ</span><span class="value">Photo d'arrivée de marathon</span></div>
+          <div><span class="label">Profil</span><span class="value">Boston Marathon · 2013–2018 · Homme · Hong Kong</span></div>
+        </div>
+        <h4>🎯 Cible</h4>
+        <p>Confirmer l'identité d'un client suspecté d'avoir simulé une blessure au genou pour obtenir des indemnités.</p>
+
+        <h4>Piste 1 — Extraction du dossard ✅</h4>
+        <div class="wu-track">
+          <p>Examen visuel approfondi de la photo de ligne d'arrivée fournie : identification du numéro de dossard du coureur suspect, <code>3543</code>.</p>
+        </div>
+
+        <h4>Piste 2 — Google Dorking ✅</h4>
+        <div class="wu-track">
+          <p>Avec le moteur Brave et des opérateurs de recherche avancée :</p>
+          <pre><code>"Boston marathon between 2013 and 2018" "Hong Kong" "number 3543"</code></pre>
+          <p>Indexation immédiate de <strong>MarathonView</strong> (marathonview.net), un agrégateur de registres de courses.</p>
+        </div>
+
+        <h4>Analyse &amp; recoupement</h4>
+        <div class="wu-track">
+          <p>La page du dossard <code>3543 Man</code> expose deux résultats. Après élimination du faux positif de 2019 (une femme au marathon d'Istanbul), la ligne pertinente correspond au Boston Marathon du <strong>17 avril 2017</strong>, dossard 3543, masculin, temps 3:55:48. Les critères démographiques s'alignent parfaitement avec le profil de la cible.</p>
+        </div>
+
+        <h4>💡 Leçons apprises</h4>
+        <blockquote>L'extraction d'un identifiant unique combinée à des guillemets stricts court-circuite la recherche manuelle dans des bases de données volumineuses.</blockquote>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">[censuré — politique anti-spoiler]</div>
+      `,
+    },
+    {
+      type: 'solved', category: 'osint', id: 'desaparicion',
+      title: 'Desaparición',
+      description: "Identification de la personne derrière une adresse Proton Mail liée à une disparition, via reconnaissance d'email (Holehe) et pivot vers un profil Gravatar public.",
+      difficulty: 'Moyen', date: '2024', platform: 'OSINTopia', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Plateforme</span><span class="value">OSINTopia</span></div>
+          <div><span class="label">Piste cible</span><span class="value">desapariciondepezi@proton.me</span></div>
+          <div><span class="label">Victime</span><span class="value">Pezi Sakuruta — Sudamérica</span></div>
+        </div>
+        <h4>📝 Description</h4>
+        <p>Le défi débute avec un avis de recherche en espagnol concernant la disparition de <strong>Pezi Sakuruta</strong> et de son père. L'adresse e-mail de l'expéditeur transmettant l'information est <code>desapariciondepezi@proton.me</code>. Objectif : identifier la personne derrière cette adresse.</p>
+
+        <h4>Étape 1 — Contrainte Proton Mail</h4>
+        <div class="wu-track">
+          <p>Proton Mail étant un fournisseur axé sur la vie privée, les méthodes classiques de récupération (formulaires d'oubli de mot de passe Google/Microsoft) ne révèlent rien directement.</p>
+        </div>
+
+        <h4>Étape 2 — Reconnaissance d'email avec Holehe</h4>
+        <div class="wu-track">
+          <p>Sous Kali Linux, l'outil <strong>Holehe</strong> interroge les fonctions de création de compte de nombreux sites pour vérifier l'association de l'email, sans envoyer de message :</p>
+          <pre><code>holehe desapariciondepezi@proton.me</code></pre>
+          <p>Résultats positifs : <code>protonmail.ch</code> (création le 04/10/2023 à 16:44:20), <code>wordpress.com</code>, et <code>en.gravatar.com</code> — ce dernier associant un profil public (nom, avatar) à l'adresse.</p>
+        </div>
+
+        <h4>Étape 3 — Pivot vers Gravatar</h4>
+        <div class="wu-track">
+          <p>Le profil <a href="https://gravatar.com/desapariciondepezi" class="text-cyan hover:underline" target="_blank" rel="noopener noreferrer">gravatar.com/desapariciondepezi</a> fournit immédiatement l'identité publique associée.</p>
+        </div>
+
+        <h4>🎯 Analyse finale</h4>
+        <p>Le prénom trouvé est d'origine mapuche (peuple autochtone du Chili et de l'Argentine), ce qui est parfaitement cohérent avec la mention « Sudamérica » de l'avis de recherche.</p>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">C------ C----- M--- <span style="color:#8B96B3; font-family:'Inter',sans-serif; font-size:0.75rem;">(identité partiellement masquée)</span></div>
+      `,
+    },
+    {
+      type: 'solved', category: 'osint', id: 'ville-oubliee',
+      title: 'La ville oubliée 1/6',
+      description: "Démasquage d'un collectif hacktiviste pro-Lyon à partir des métadonnées d'un PDF de revendication croisées avec un hashtag de ralliement en argot lyonnais.",
+      difficulty: 'Moyen', date: '2024', platform: 'OSINTopia', link: '#',
+      content: `
+        <div class="wu-meta">
+          <div><span class="label">Plateforme</span><span class="value">OSINTopia</span></div>
+          <div><span class="label">Fichier</span><span class="value">Journal.pdf</span></div>
+          <div><span class="label">Revendication</span><span class="value">Compte X — GonesLibres</span></div>
+        </div>
+        <h4>📝 Description</h4>
+        <p>Un document PDF présente la revendication d'un mystérieux groupe d'hacktivistes pro-Lyon, ayant attiré l'attention des autorités pour ses actions ciblées contre certaines infrastructures. Message publié : <em>« Saint-Étienne a les étoiles, mais Lyon a la flamme. Rendez-nous notre place ! GonesLibres »</em>. Objectif : identifier le nom réel du collectif.</p>
+
+        <h4>Étape 1 — Métadonnées ExifTool</h4>
+        <div class="wu-track">
+          <pre><code>exiftool Journal.pdf</code></pre>
+          <p>Champs relevés : <strong>Author</strong> — <code>Sapig Sapig</code> ; <strong>Creator Tool</strong> — Canva, modèle <em>White and Black Professional Magazine Cover</em>.</p>
+        </div>
+
+        <h4>Étape 2 — Le hashtag de ralliement</h4>
+        <div class="wu-track">
+          <p>Le message publié contient le hashtag <strong>GonesLibres</strong>. En argot lyonnais, « les Gones » désigne les enfants ou habitants de Lyon — la signature idéologique officieuse du groupe.</p>
+        </div>
+
+        <h4>Étape 3 — Erreur d'analyse écartée</h4>
+        <div class="wu-track">
+          <span class="wu-fake">Les Sapig Sapig</span>
+          <p>Hypothèse invalidée : « Sapig » est le pseudonyme X d'un <strong>membre</strong> du collectif (vraisemblablement l'auteur du document), pas le nom officiel du groupe.</p>
+        </div>
+
+        <h4>🎯 Analyse finale</h4>
+        <p>Le croisement du pseudonyme « Sapig », opérant sous couvert du collectif, et du hashtag « GonesLibres » utilisé comme signature publique, permet de valider l'identité du groupe.</p>
+
+        <h4>🏁 Flag</h4>
+        <div class="wu-flag">L-- G---- L----- <span style="color:#8B96B3; font-family:'Inter',sans-serif; font-size:0.75rem;">(nom partiellement masqué)</span></div>
+      `,
+    },
+  ];
+
+  /* ---------- Génération dynamique des puces de filtre ---------- */
+  const filterGroup = document.querySelector('[role="group"][aria-label="Filtrer par catégorie"]');
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.cat = cat.id;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.className = 'chip inline-flex items-center gap-1.5 font-mono text-xs sm:text-sm px-3.5 py-2 min-h-[40px] rounded-full border border-hairline text-muted';
+    btn.innerHTML = `${iconSvg(cat.icon, cat.color)}<span>${cat.label}</span>`;
+    filterGroup.appendChild(btn);
+  });
+
+  /* ---------- État des filtres ---------- */
+  let state = { type: 'designed', category: 'all' };
+
+  const grid = document.getElementById('panel-writeups');
+  const emptyState = document.getElementById('emptyState');
+
+  function catMeta(id) { return CATEGORIES.find(c => c.id === id); }
+
+  function difficultyColor(d) {
+    if (d === 'Facile') return '#34D399';
+    if (d === 'Moyen') return '#FBBF24';
+    return '#FB7185';
+  }
+
+  function render() {
+    const items = WRITEUPS.filter(w =>
+      w.type === state.type && (state.category === 'all' || w.category === state.category)
+    );
+
+    grid.innerHTML = '';
+    emptyState.classList.toggle('hidden', items.length !== 0);
+
+    items.forEach((w, i) => {
+      const cat = catMeta(w.category);
+      const card = document.createElement('article');
+      card.className = 'card-enter group rounded-xl border border-hairline bg-surface p-5 flex flex-col hover:border-cyan/40 transition-colors';
+      card.style.animationDelay = prefersReducedMotion ? '0ms' : `${i * 40}ms`;
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <span class="inline-flex items-center gap-1.5 font-mono text-[11px] px-2.5 py-1 rounded-full border" style="color:${cat.color}; border-color:${cat.color}55; background:${cat.color}14;">
+            ${iconSvg(cat.icon, cat.color)}${cat.label}
+          </span>
+          ${w.draft ? '<span class="font-mono text-[10px] px-2 py-1 rounded-full border border-hairline text-muted">Bientôt</span>' : ''}
+        </div>
+        <h3 class="font-display font-semibold text-lg text-ink mb-2">${w.title}</h3>
+        <p class="text-sm text-muted leading-relaxed mb-5 flex-1">${w.description}</p>
+        <div class="flex items-center justify-between font-mono text-xs text-muted mb-4">
+          <span style="color:${difficultyColor(w.difficulty)}">● ${w.difficulty}</span>
+          <span>${w.platform ? w.platform + ' · ' : ''}${w.date}</span>
+        </div>
+        <button type="button" data-open-writeup="${w.id || ''}" class="inline-flex items-center gap-1.5 text-sm font-medium text-cyan hover:gap-2.5 transition-all">
+          Lire le writeup
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  /* ---------- Modale de writeup ---------- */
+  const writeupOverlay = document.getElementById('writeupOverlay');
+  const writeupPanel = document.getElementById('writeupPanel');
+  const writeupTitle = document.getElementById('writeupTitle');
+  const writeupKicker = document.getElementById('writeupKicker');
+  const writeupBody = document.getElementById('writeupBody');
+  const writeupCloseX = document.getElementById('writeupCloseX');
+  const writeupCloseBtn = document.getElementById('writeupCloseBtn');
+  let lastFocusedTrigger = null;
+
+  function findWriteup(id) {
+    return WRITEUPS.find(w => w.id === id);
+  }
+
+  function openWriteupModal(id) {
+    const w = findWriteup(id);
+    if (!w) return;
+
+    lastFocusedTrigger = document.activeElement;
+
+    writeupTitle.textContent = w.title;
+    writeupKicker.textContent = w.platform ? `> ${w.platform} · cat writeup.md` : '> cat writeup.md';
+    writeupBody.innerHTML = w.content || '<p>Le contenu détaillé de ce writeup arrive bientôt.</p>';
+    writeupBody.scrollTop = 0;
+
+    writeupOverlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    writeupPanel.focus();
+  }
+
+  function closeWriteupModal() {
+    writeupOverlay.classList.remove('is-open');
+    document.body.style.overflow = '';
+    if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
+      lastFocusedTrigger.focus();
+    }
+  }
+
+  // Délégation de clic : chaque bouton "Lire le writeup" généré dynamiquement dans la grille
+  grid.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-open-writeup]');
+    if (!btn) return;
+    openWriteupModal(btn.dataset.openWriteup);
+  });
+
+  writeupCloseX.addEventListener('click', closeWriteupModal);
+  writeupCloseBtn.addEventListener('click', closeWriteupModal);
+
+  // Clic sur l'overlay (hors du panneau) = fermeture
+  writeupOverlay.addEventListener('click', (e) => {
+    if (e.target === writeupOverlay) closeWriteupModal();
+  });
+
+  // Touche Échap = fermeture
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && writeupOverlay.classList.contains('is-open')) {
+      closeWriteupModal();
+    }
+  });
+
+  /* ---------- Interactions : onglets ---------- */
+  const tabs = document.querySelectorAll('.tab[role="tab"]');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.setAttribute('aria-selected', 'false'));
+      tab.setAttribute('aria-selected', 'true');
+      state.type = tab.dataset.type;
+      render();
+    });
+  });
+
+  /* ---------- Interactions : filtres de catégorie ---------- */
+  filterGroup.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-cat]');
+    if (!btn) return;
+    filterGroup.querySelectorAll('button[data-cat]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    btn.setAttribute('aria-pressed', 'true');
+    state.category = btn.dataset.cat;
+    render();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
